@@ -1,4 +1,5 @@
 import random
+import datetime
 
 class Sensor:
     def __init__(self, sensor_id, name, unit, min_value, max_value, frequency=1):
@@ -21,18 +22,31 @@ class Sensor:
         self.active = True                  # Flaga określająca, czy czujnik jest aktywny
         self.last_value = None              # Ostatnio wygenerowana wartość
         self.history = []                   # Historia ostatnich wartości
+        self.callbacks = []
+
+    def register_callback(self, callback):
+        """
+        Rejestruje callback do wywołania przy odczycie danych.
+        """
+        self.callbacks.append(callback)
 
     def read_value(self):
         """
-        Symuluje pobranie odczytu z czujnika.
-        W klasie bazowej zwraca losową wartość z przedziału [min_value, max_value].
+        Symuluje pobranie odczytu z czujnika i wywołuje callbacki.
         """
         if not self.active:
             raise Exception(f"Czujnik {self.name} jest wyłączony.")
+
         value = random.uniform(self.min_value, self.max_value)
         self.last_value = value
-        self._add_to_history(value)
+
+        # Wywołanie callbacków
+        for callback in self.callbacks:
+            callback(self.sensor_id, datetime.datetime.now(), value, self.unit)
+
         return value
+
+
 
     def calibrate(self, calibration_factor):
         """
@@ -81,3 +95,4 @@ class Sensor:
 
     def __str__(self):
         return f"Sensor(id={self.sensor_id}, name={self.name}, unit={self.unit})"
+
