@@ -1,7 +1,8 @@
 import random
 import datetime
+from abc import ABC, abstractmethod # Dodano import
 
-class Sensor:
+class Sensor(ABC): # Sensor dziedziczy po ABC (Abstract Base Class)
     def __init__(self, sensor_id, name, unit, min_value, max_value, frequency=1):
         """
         Inicjalizacja czujnika.
@@ -13,15 +14,15 @@ class Sensor:
         :param max_value: Maksymalna wartość odczytu
         :param frequency: Częstotliwość odczytów (sekundy)
         """
-        self.sensor_id = sensor_id          # Unikalny identyfikator czujnika
-        self.name = name                    # Nazwa lub opis czujnika
-        self.unit = unit                    # Jednostka miary (np. °C, %, hPa, lux)
-        self.min_value = min_value          # Minimalna wartość odczytu
-        self.max_value = max_value          # Maksymalna wartość odczytu
-        self.frequency = frequency          # Częstotliwość odczytów w sekundach
-        self.active = True                  # Flaga określająca, czy czujnik jest aktywny
-        self.last_value = None              # Ostatnio wygenerowana wartość
-        self.history = []                   # Historia ostatnich wartości
+        self.sensor_id = sensor_id
+        self.name = name
+        self.unit = unit
+        self.min_value = min_value
+        self.max_value = max_value
+        self.frequency = frequency
+        self.active = True
+        self.last_value = None
+        self.history = []
         self.callbacks = []
 
     def register_callback(self, callback):
@@ -30,23 +31,34 @@ class Sensor:
         """
         self.callbacks.append(callback)
 
+    @abstractmethod
+    def _generate_new_value(self):
+        """
+        Metoda abstrakcyjna, którą klasy potomne muszą zaimplementować.
+        Odpowiada za wygenerowanie nowej wartości specyficznej dla danego typu czujnika.
+        Powinna zwrócić wygenerowaną wartość.
+        """
+        pass
+
     def read_value(self):
         """
-        Symuluje pobranie odczytu z czujnika i wywołuje callbacki.
+        Odczytuje wartość z czujnika, aktualizuje stan wewnętrzny i powiadamia callbacki.
         """
         if not self.active:
             raise Exception(f"Czujnik {self.name} jest wyłączony.")
 
-        value = random.uniform(self.min_value, self.max_value)
+        # Pobranie wartości z implementacji w klasie potomnej
+        value = self._generate_new_value()
+
         self.last_value = value
+        self._add_to_history(value) # Dodanie do historii
 
         # Wywołanie callbacków
+        timestamp = datetime.datetime.now() # Pobranie aktualnego znacznika czasu
         for callback in self.callbacks:
-            callback(self.sensor_id, datetime.datetime.now(), value, self.unit)
+            callback(self.sensor_id, timestamp, value, self.unit)
 
         return value
-
-
 
     def calibrate(self, calibration_factor):
         """
@@ -54,8 +66,10 @@ class Sensor:
         Jeśli nie wykonano jeszcze odczytu, wykonuje go najpierw.
         """
         if self.last_value is None:
-            self.read_value()
+            self.read_value() # To wywoła _generate_new_value, callbacki, historię
         self.last_value *= calibration_factor
+        # Uwaga: skalibrowana wartość jest dodawana do historii, ale callbacki nie są ponownie
+        # wywoływane z tą skalibrowaną wartością w ramach tej metody.
         self._add_to_history(self.last_value)
         return self.last_value
 
@@ -95,4 +109,3 @@ class Sensor:
 
     def __str__(self):
         return f"Sensor(id={self.sensor_id}, name={self.name}, unit={self.unit})"
-

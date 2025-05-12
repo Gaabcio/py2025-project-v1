@@ -49,7 +49,7 @@ class Logger:
         """
         Wymusza zapis bufora i zamyka bieżący plik.
         """
-        self._flush_buffer()
+        self._flush_buffer()  # Wymusza zapis bufora do pliku
         if self.current_file:
             self.current_file.close()
             self.current_file = None

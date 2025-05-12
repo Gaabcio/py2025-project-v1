@@ -8,7 +8,7 @@ class LightSensor(Sensor):
         super().__init__(sensor_id, name, "lx", min_value, max_value, frequency)
         self._start_time = time.time()
 
-    def read_value(self):
+    def _generate_new_value(self): # Implementacja metody abstrakcyjnej
         if not self.active:
             raise Exception(f"Czujnik {self.name} jest wyłączony.")
         elapsed = time.time() - self._start_time
@@ -17,6 +17,4 @@ class LightSensor(Sensor):
         value = self.min_value + (self.max_value - self.min_value) * cycle
         value += random.uniform(-100, 100)
         value = max(self.min_value, min(self.max_value, value))
-        self.last_value = value
-        self._add_to_history(value)
         return value
