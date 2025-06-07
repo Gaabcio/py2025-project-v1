@@ -1,7 +1,6 @@
 import time
 from datetime import datetime
-import threading
-import sys  # Dodano dla sys.exit
+import sys
 
 from sensors import TemperatureSensor, HumiditySensor, PressureSensor, LightSensor
 from logger import Logger
@@ -48,23 +47,22 @@ def main():
 
     try:
         print(f"Attempting to connect to server at {net_cfg['host']}:{net_cfg['port']}...")
-        client.connect()  # Ta metoda teraz rzuca wyjątek w razie niepowodzenia
-        # Komunikat o sukcesie jest teraz w client.connect()
+        client.connect()
+
     except Exception as e:
         print(f"CRITICAL: Failed to connect to network server: {e}. Exiting.")
-        # Logger mógł nie zostać poprawnie zainicjowany, jeśli błąd wystąpił wcześniej,
-        # ale jeśli dotarliśmy tutaj, to logger.log_reading powinno być bezpieczne.
+
         logger.log_reading("startup", datetime.now(), 0, f"client_connect_failed: {type(e).__name__}")
         logger.stop()
-        sys.exit(1)  # Zakończ, jeśli nie można połączyć się z serwerem
+        sys.exit(1)
 
     # 4. Pętla do cyklicznego odczytu i wysyłki
     def sensor_loop():
         try:
             while True:
-                # print("--- New sensor reading cycle ---") # Debug log
+
                 for sensor in sensors:
-                    value = sensor.read_value()  # To wywoła callback logger.log_reading dla sensora
+                    value = sensor.read_value()
                     if value is not None:
                         data_payload = {
                             "timestamp": datetime.now().isoformat(),
@@ -77,9 +75,7 @@ def main():
                         if not client.send(data_payload):
                             print(
                                 f"ALERT: Failed to send data for sensor {sensor.sensor_id} after all retries. Check server and network.")
-                            # Można tu dodać logikę np. próby ponownego połączenia klienta,
-                            # jeśli client.send() zwróci False z powodu błędu gniazda.
-                            # np. if not client.sock: try client.connect() ...
+
                 time.sleep(1)
         except KeyboardInterrupt:
             print("\nSensor loop interrupted by user.")

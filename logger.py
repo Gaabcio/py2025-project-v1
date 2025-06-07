@@ -59,13 +59,13 @@ class Logger:
             if not file_exists or os.path.getsize(self._current_file_path) == 0:
                 writer = csv.writer(self._file_handle)
                 writer.writerow(["timestamp", "sensor_id", "value", "unit"])
-                self._file_handle.flush() 
+                self._file_handle.flush()
+
         except IOError as e:
-            # Błąd otwarcia pliku jest dość krytyczny, można go tu zgłosić
             print(f"BŁĄD Loggera: Nie można otworzyć pliku logu '{self._current_file_path}': {e}")
             self._current_file_path = None
             self._file_handle = None
-            return # Logger nie mógł wystartować
+            return
             
         self.is_active = True
 
@@ -78,8 +78,8 @@ class Logger:
             try:
                 self._last_closed_file_path = self._current_file_path
                 self._file_handle.close()
-            except IOError: # Błąd zamknięcia pliku
-                pass # Można dodać logowanie błędu, jeśli jest to konieczne
+            except IOError:
+                pass
         
         self._file_handle = None
         self.is_active = False
@@ -94,8 +94,8 @@ class Logger:
                 self._file_handle.flush() 
                 self._file_line_count += len(self._buffer)
                 self._buffer.clear()
-            except IOError: # Błąd zapisu
-                pass # Można dodać logowanie błędu
+            except IOError:
+                pass
 
     def log_reading(
         self,
@@ -161,8 +161,8 @@ class Logger:
                 with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zf:
                     zf.write(old_file_path_for_archive, archive_filename_original)
                 os.remove(old_file_path_for_archive) 
-            except (IOError, OSError, zipfile.BadZipFile): # Błędy archiwizacji/usuwania
-                pass # Można dodać logowanie błędu
+            except (IOError, OSError, zipfile.BadZipFile):
+                pass
         
         self._clean_old_archives()
         self.start()
@@ -179,7 +179,7 @@ class Logger:
                     file_mod_time = datetime.fromtimestamp(os.path.getmtime(filepath))
                     if file_mod_time < cutoff_date:
                         os.remove(filepath)
-                except OSError: # Błąd usuwania
+                except OSError:
                     pass 
 
     def read_logs(
@@ -200,8 +200,8 @@ class Logger:
                 if filename.endswith(".csv"):
                     filepath = os.path.join(self.log_dir, filename)
                     files_to_check.add(filepath)
-        except OSError: # Błąd listowania katalogu
-            return # Nie można kontynuować
+        except OSError:
+            return
 
         archive_files_content = {} 
         try:
@@ -213,9 +213,9 @@ class Logger:
                             if not zf.namelist(): continue
                             csv_filename_in_zip = zf.namelist()[0] 
                             archive_files_content[zip_filepath] = zf.read(csv_filename_in_zip).decode('utf-8').splitlines()
-                    except (zipfile.BadZipFile, IndexError, UnicodeDecodeError): # Błędy odczytu ZIP
+                    except (zipfile.BadZipFile, IndexError, UnicodeDecodeError):
                         pass 
-        except OSError: # Błąd listowania katalogu archiwum
+        except OSError:
             pass
 
 
@@ -242,9 +242,9 @@ class Logger:
                                     except (ValueError, TypeError): pass 
                                     row["timestamp"] = record_ts 
                                     yield row
-                        except (csv.Error, ValueError, TypeError): pass # Błąd przetwarzania wiersza
-            except IOError: pass # Błąd odczytu pliku CSV
-            except Exception: pass # Inne nieoczekiwane błędy
+                        except (csv.Error, ValueError, TypeError): pass
+            except IOError: pass
+            except Exception: pass
 
         for zip_filepath, lines in archive_files_content.items():
             if not lines or len(lines) < 2: continue
@@ -269,8 +269,12 @@ class Logger:
                         if sensor_id is None or row.get("sensor_id") == sensor_id:
                             try:
                                 row["value"] = float(row["value"])
-                            except (ValueError, TypeError): pass
+                            except (ValueError, TypeError):
+                                pass
                             row["timestamp"] = record_ts
                             yield row
-                except (csv.Error, ValueError, TypeError): pass # Błąd przetwarzania wiersza z ZIP
-                except Exception: pass # Inne błędy
+                except (csv.Error, ValueError, TypeError):
+                    pass
+
+                except Exception:
+                    pass

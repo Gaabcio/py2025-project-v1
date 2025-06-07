@@ -7,11 +7,12 @@ import os
 
 # --- Początek definicji klasy NetworkServer ---
 class NetworkServer:
-    def __init__(self, port: int):
+    def __init__(self, port: int, data_callback=None):
         self.port = port
         self.running = False
         self._server_socket = None
         self._client_threads = []
+        self.data_callback = data_callback
 
     def start(self) -> None:
         self.running = True
@@ -24,28 +25,30 @@ class NetworkServer:
 
             while self.running:
                 try:
-                    self._server_socket.settimeout(1.0)  # Timeout dla accept, aby pętla mogła sprawdzić self.running
+                    self._server_socket.settimeout(1.0)
                     client_socket, client_address = self._server_socket.accept()
                     print(f"[SERVER] Accepted connection from {client_address}")
 
                     self._client_threads = [t for t in self._client_threads if t.is_alive()]
                     thread = threading.Thread(target=self._handle_client, args=(client_socket, client_address),
-                                              daemon=True)  # Ustawienie daemon=True
+                                              daemon=True)
                     self._client_threads.append(thread)
                     thread.start()
                 except socket.timeout:
-                    continue  # Wróć do sprawdzania self.running i ponownego accept
+                    continue
                 except OSError as e:
-                    if self.running:  # Jeśli błąd wystąpił podczas normalnego działania
+                    if self.running:
                         print(f"[SERVER] Error accepting connection or socket error: {e}", file=sys.stderr)
-                    break  # Prawdopodobnie serwer jest zamykany lub wystąpił poważny błąd
+                    break
                 except Exception as e:
                     if self.running:
                         print(f"[SERVER] Unexpected error accepting client: {e}", file=sys.stderr)
                     continue
-        except OSError as e:  # Błąd przy bindowaniu gniazda
+        except OSError as e:
             print(f"[SERVER_SETUP] CRITICAL: Could not bind to port {self.port}. Error: {e}", file=sys.stderr)
-            self.running = False  # Upewnij się, że serwer wie, że nie działa
+            self.running = False
+            if self.data_callback:
+                self.data_callback({"type": "server_error", "message": f"Could not bind to port {self.port}: {e}"})
             return
         finally:
             if self._server_socket:
@@ -57,12 +60,12 @@ class NetworkServer:
 
     def stop(self):
         print("[SERVER] Stop signal received. Shutting down...")
-        self.running = False  # Zasygnalizuj wszystkim pętlom, aby się zakończyły
+        self.running = False
 
-        # Zamknięcie gniazda serwera przerwie blokujące accept()
+
         if self._server_socket:
             try:
-                self._server_socket.close()  # To pomoże wyjść z pętli accept w start()
+                self._server_socket.close()
             except Exception as e:
                 print(f"[SERVER] Error closing server socket during stop: {e}", file=sys.stderr)
 
@@ -70,7 +73,7 @@ class NetworkServer:
         for thread in self._client_threads:
             if thread.is_alive():
                 try:
-                    thread.join(timeout=2.0)
+                    thread.join(timeout=1.0)
                     if thread.is_alive():
                         print(f"[SERVER] Thread {thread.name} unresponsive after join timeout.", file=sys.stderr)
                 except Exception as e:
@@ -80,30 +83,26 @@ class NetworkServer:
 
     def _handle_client(self, client_socket, client_address):
         print(f"[SERVER] Client {client_address} connected on thread {threading.current_thread().name}")
-        # Ustawienie dłuższego timeoutu dla operacji recv na gnieździe klienta
-        # lub brak timeoutu, jeśli chcemy czekać w nieskończoność (niezalecane bez kontroli self.running)
-        client_socket.settimeout(20.0)  # Np. 20 sekund bezczynności klienta
+        client_socket.settimeout(20.0)
 
-        with client_socket:  # Automatycznie zamyka gniazdo po wyjściu z tej metody
-            remaining_buffer = b''  # Bufor dla niekompletnych wiadomości
-            while self.running:  # Główna pętla obsługi tego klienta
+        with client_socket:
+            remaining_buffer = b''
+            while self.running:
                 try:
                     # 1. Odbierz dane od klienta
                     chunk = client_socket.recv(1024)
                     if not chunk:
-                        # Klient zamknął połączenie (wysłał EOF)
                         print(f"[SERVER] Client {client_address} disconnected (EOF).")
-                        break  # Zakończ pętlę obsługi tego klienta
+                        break
 
                     current_data = remaining_buffer + chunk
 
-                    # Przetwarzaj wszystkie kompletne wiadomości w buforze
                     while b'\n' in current_data and self.running:
                         line_end = current_data.find(b'\n')
                         complete_message = current_data[:line_end]
-                        current_data = current_data[line_end + 1:]  # Pozostała część bufora
+                        current_data = current_data[line_end + 1:]
 
-                        if not complete_message.strip():  # Pomiń puste linie
+                        if not complete_message.strip():
                             continue
 
                         # 2. Przetwórz wiadomość
@@ -112,58 +111,53 @@ class NetworkServer:
                             decoded_data = json.loads(msg_str)
                             print(f"[SERVER] Received from {client_address}: {decoded_data}")
 
-                            # 3. Wyślij ACK
+                            if self.data_callback:
+                                try:
+                                    self.data_callback({"type": "sensor_data", "payload": decoded_data})
+                                except Exception as cb_ex:
+                                    print(f"[SERVER] Error in data_callback: {cb_ex}", file=sys.stderr)
+
                             client_socket.sendall(b"ACK\n")
 
                         except json.JSONDecodeError as e_json:
-                            print(
-                                f"[SERVER] JSON Decode Error from {client_address}: {e_json}. Msg: '{msg_str[:100]}...'",
-                                file=sys.stderr)
+                            print(f"[SERVER] JSON Decode Error from {client_address}: {e_json}. Msg: '{msg_str[:100]}...'", file=sys.stderr)
                             client_socket.sendall(b"NACK_JSON_ERROR\n")
+                            if self.data_callback:
+                                self.data_callback({"type": "decode_error", "message": f"JSON Decode Error from {client_address}. Msg: '{msg_str[:100]}...'"})
                         except socket.error as se_ack:
-                            print(f"[SERVER] Socket error sending ACK/NACK to {client_address}: {se_ack}",
-                                  file=sys.stderr)
-                            self.running = False  # Poważny błąd, zatrzymaj serwer lub tylko tego klienta
-                            break  # Przerwij pętlę while b'\n' in current_data
+                            print(f"[SERVER] Socket error sending ACK/NACK to {client_address}: {se_ack}", file=sys.stderr)
+                            self.running = False
+                            break
                         except Exception as e_proc:
-                            print(f"[SERVER] Error processing message/responding to {client_address}: {e_proc}",
-                                  file=sys.stderr)
+                            print(f"[SERVER] Error processing message/responding to {client_address}: {e_proc}", file=sys.stderr)
                             try:
                                 client_socket.sendall(b"NACK_SERVER_ERROR\n")
                             except socket.error:
                                 self.running = False;
-                                break  # Poważny błąd
+                                break
 
-                    if not self.running:  # Jeśli serwer został zatrzymany podczas przetwarzania wiadomości
+                    if not self.running:
                         break
-
-                    remaining_buffer = current_data  # Zapisz niekompletną część wiadomości
+                    remaining_buffer = current_data
 
                 except socket.timeout:
-                    # client_socket.recv() przekroczył limit czasu. Klient był nieaktywny.
-                    print(
-                        f"[SERVER] Client {client_address} timed out (inactive for {client_socket.gettimeout()}s). Closing connection.",
-                        file=sys.stderr)
-                    break  # Zakończ pętlę obsługi tego klienta
+                    print( f"[SERVER] Client {client_address} timed out (inactive for {client_socket.gettimeout()}s). Closing connection.", file=sys.stderr)
+                    break
                 except ConnectionResetError:
                     print(f"[SERVER] Connection reset by {client_address}.", file=sys.stderr)
-                    break  # Zakończ pętlę obsługi tego klienta
-                except socket.error as e_sock:  # Inne błędy gniazda
+                    break
+                except socket.error as e_sock:
                     print(f"[SERVER] Socket error with {client_address}: {e_sock}", file=sys.stderr)
-                    break  # Zakończ pętlę obsługi tego klienta
+                    break
                 except Exception as e_critical:
-                    print(f"[SERVER] Unexpected critical error handling client {client_address}: {e_critical}",
-                          file=sys.stderr)
-                    break  # Zakończ pętlę obsługi tego klienta
-
-            # Koniec pętli while self.running lub przerwanie przez break
-            print(
-                f"[SERVER] Finished handling client {client_address}. Thread {threading.current_thread().name} exiting.")
+                    print(f"[SERVER] Unexpected critical error handling client {client_address}: {e_critical}", file=sys.stderr)
+                    break
 
 
-# --- Koniec definicji klasy NetworkServer ---
+            print(f"[SERVER] Finished handling client {client_address}. Thread {threading.current_thread().name} exiting.")
 
-# --- Blok do uruchomienia serwera jako skrypt ---
+
+
 if __name__ == "__main__":
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -197,7 +191,7 @@ if __name__ == "__main__":
                 file=sys.stderr)
 
     server = NetworkServer(port=server_port)
-    server_thread = None  # Wątek dla serwera, aby można było go łatwo zatrzymać
+    server_thread = None
 
     try:
         print(f"[SERVER_SETUP] Starting server on port {server_port}...")
@@ -211,16 +205,16 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         print("\n[SERVER_SETUP] KeyboardInterrupt received by main thread. Shutting down server...", file=sys.stderr)
-    except Exception as e:  # Inne błędy w głównym bloku
+    except Exception as e:
         print(f"[SERVER_SETUP] CRITICAL error in main execution block: {e}", file=sys.stderr)
     finally:
         print("[SERVER_SETUP] Main thread initiating server stop...")
-        if server.running:  # Jeśli serwer nadal myśli, że działa
-            server.stop()  # Wywołaj stop serwera
+        if server.running:
+            server.stop()
 
         if server_thread and server_thread.is_alive():
             print("[SERVER_SETUP] Waiting for server thread to complete...")
-            server_thread.join(timeout=5.0)  # Poczekaj na zakończenie wątku serwera
+            server_thread.join(timeout=5.0)
             if server_thread.is_alive():
                 print("[SERVER_SETUP] Server thread did not complete in time.", file=sys.stderr)
 

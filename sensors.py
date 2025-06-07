@@ -96,7 +96,7 @@ class TemperatureSensor(Sensor):
         Można tu dodać logikę np. symulującą dobowe wahania temperatury.
         """
         if not self.active:
-            # print(f"Czujnik {self.name} jest wyłączony.")
+            print(f"Czujnik {self.name} jest wyłączony.")
             return None
         # Prosta symulacja - losowa wartość w zakresie
         value = random.uniform(self.min_value, self.max_value)
@@ -122,7 +122,7 @@ class HumiditySensor(Sensor):
         Symuluje odczyt wilgotności.
         """
         if not self.active:
-            # print(f"Czujnik {self.name} jest wyłączony.")
+            print(f"Czujnik {self.name} jest wyłączony.")
             return None
         # Prosta symulacja
         value = random.uniform(self.min_value, self.max_value)
@@ -147,7 +147,7 @@ class PressureSensor(Sensor):
         Symuluje odczyt ciśnienia atmosferycznego.
         """
         if not self.active:
-            # print(f"Czujnik {self.name} jest wyłączony.")
+            print(f"Czujnik {self.name} jest wyłączony.")
             return None
         # Ciśnienie zmienia się powoli
         value = random.uniform(self.min_value, self.max_value)
@@ -173,7 +173,7 @@ class LightSensor(Sensor):
         Można tu dodać logikę symulującą zmiany w zależności od pory dnia.
         """
         if not self.active:
-            # print(f"Czujnik {self.name} jest wyłączony.")
+            print(f"Czujnik {self.name} jest wyłączony.")
             return None
         # Prosta symulacja, np. w zależności od godziny (uproszczona)
         current_hour = datetime.now().hour
@@ -197,7 +197,7 @@ if __name__ == '__main__':
     temp_sensor = TemperatureSensor(sensor_id="temp001", frequency=2)
     humidity_sensor = HumiditySensor(sensor_id="hum001", frequency=3)
     pressure_sensor = PressureSensor(sensor_id="press001", frequency=5)
-    light_sensor = LightSensor(sensor_id="light001", frequency=1.5)
+    light_sensor = LightSensor(sensor_id="light001", frequency=1)
 
     sensors = [temp_sensor, humidity_sensor, pressure_sensor, light_sensor]
 
@@ -207,18 +207,9 @@ if __name__ == '__main__':
         print(f"Uruchomiono: {sensor}")
 
     try:
-        for i in range(10): # Symuluj przez 10 odczytów dla każdego (w przybliżeniu)
+        for i in range(10): # Symuluj przez 10 odczytów dla każdego
             for sensor in sensors:
-                # Symulacja odczytu zgodna z częstotliwością (uproszczone)
-                # W rzeczywistym systemie każdy czujnik działałby we własnym wątku lub pętli zdarzeń
-                # Tutaj dla prostoty wywołujemy read_value() sekwencyjnie,
-                # ale logger będzie wywoływany przez callback.
-                # Dla demonstracji callbacków, log_reading zostanie dodane w module loggera.
-                
-                # Prosta symulacja opóźnienia zgodnego z frequency
-                # time.sleep(sensor.frequency) # To zablokowałoby pętlę, nie jest idealne tutaj
-                
-                # W tym miejscu odczyt jest inicjowany, a callback (jeśli zarejestrowany) zostanie wywołany wewnątrz read_value()
+
                 value = sensor.read_value()
                 if value is not None:
                     print(f"Odczyt z {sensor.name} ({sensor.sensor_id}): {value} {sensor.unit} o {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
