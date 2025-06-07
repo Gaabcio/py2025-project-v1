@@ -1,0 +1,5 @@
+/__pycache__
+/.idea
+/network/__pycache__
+/sensors/__pycache__
+*.pyc
