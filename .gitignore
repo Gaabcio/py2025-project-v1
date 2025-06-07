@@ -3,3 +3,4 @@
 /network/__pycache__
 /sensors/__pycache__
 *.pyc
+*.csv
